@@ -1,12 +1,14 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { useNotifications } from '@/hooks/useNotifications';
+import { configureFirebase } from '@/services/firebase';
+import { startAuthListener, useAuthStore } from '@/stores/authStore';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -15,23 +17,26 @@ export const unstable_settings = {
 };
 
 SplashScreen.preventAutoHideAsync();
+configureFirebase();
+startAuthListener();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  const hydrated = useAuthStore((s) => s.hydrated);
 
   useEffect(() => {
     if (error) throw error;
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
+    if (loaded && hydrated) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [loaded, hydrated]);
 
-  if (!loaded) {
+  if (!loaded || !hydrated) {
     return null;
   }
 
@@ -41,6 +46,7 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   useNotifications();
+  useAuthGate();
 
   const theme = colorScheme === 'dark' ? {
     ...DarkTheme,
@@ -61,7 +67,23 @@ function RootLayoutNav() {
             headerBackTitle: 'Back',
           }}
         />
+        <Stack.Screen name="sign-in" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );
+}
+
+function useAuthGate() {
+  const user = useAuthStore((s) => s.user);
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    const onSignIn = segments[0] === 'sign-in';
+    if (!user && !onSignIn) {
+      router.replace('/sign-in');
+    } else if (user && onSignIn) {
+      router.replace('/(tabs)');
+    }
+  }, [user, segments, router]);
 }

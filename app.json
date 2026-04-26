@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Plant",
-    "slug": "plant",
+    "name": "Petalwise",
+    "slug": "petalwise",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "plant",
+    "scheme": "petalwise",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash-icon.png",
@@ -14,9 +14,13 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.srslyk.petalwise",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "usesAppleSignIn": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Plant needs camera access to photograph your plants for identification and health diagnosis.",
-        "NSPhotoLibraryUsageDescription": "Plant needs photo library access to select plant photos."
+        "NSCameraUsageDescription": "Petalwise needs camera access to photograph your plants for identification and health diagnosis.",
+        "NSPhotoLibraryUsageDescription": "Petalwise needs photo library access to select plant photos.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -27,10 +31,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
-      ]
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.srslyk.petalwise"
     },
     "web": {
       "bundler": "metro",
@@ -44,13 +50,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Plant needs camera access to photograph your plants."
+          "cameraPermission": "Petalwise needs camera access to photograph your plants."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Plant needs photo library access to select plant photos."
+          "photosPermission": "Petalwise needs photo library access to select plant photos."
         }
       ],
       [
@@ -59,10 +65,38 @@
           "icon": "./assets/images/icon.png",
           "color": "#2E7D32"
         }
-      ]
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      "@react-native-firebase/crashlytics",
+      "@react-native-firebase/messaging",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static",
+            "forceStaticLinking": [
+              "RNFBApp",
+              "RNFBAuth",
+              "RNFBAnalytics",
+              "RNFBCrashlytics",
+              "RNFBMessaging"
+            ]
+          }
+        }
+      ],
+      "expo-apple-authentication",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "edbfc061-780f-4adb-aed5-20cf1758514e"
+      }
+    },
+    "owner": "kgreene1"
   }
 }

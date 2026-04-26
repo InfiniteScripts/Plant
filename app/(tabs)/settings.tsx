@@ -12,6 +12,7 @@ import { Text } from '@/components/Themed';
 import { setApiKey, getApiKey, hasApiKey } from '@/services/ai';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme();
@@ -21,6 +22,15 @@ export default function SettingsScreen() {
   const [showKey, setShowKey] = useState(false);
   const [reminderHour, setReminderHour] = useState('9');
   const [reminderMinute, setReminderMinute] = useState('00');
+  const user = useAuthStore((s) => s.user);
+  const signOut = useAuthStore((s) => s.signOut);
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+    ]);
+  };
 
   useEffect(() => {
     hasApiKey().then(setHasKey);
@@ -123,10 +133,22 @@ export default function SettingsScreen() {
         </RNView>
       </RNView>
 
+      {/* Account */}
+      <Text style={styles.sectionTitle}>Account</Text>
+      <RNView style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.cardLabel, { color: colors.secondaryText }]}>Signed in as</Text>
+        <Text style={[styles.accountEmail, { color: colors.text }]}>
+          {user?.email ?? user?.displayName ?? 'Anonymous'}
+        </Text>
+        <TouchableOpacity onPress={handleSignOut} style={styles.signOutRow}>
+          <Text style={[styles.signOutText, { color: colors.error }]}>Sign Out</Text>
+        </TouchableOpacity>
+      </RNView>
+
       {/* About */}
       <Text style={styles.sectionTitle}>About</Text>
       <RNView style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={styles.aboutTitle}>Plant</Text>
+        <Text style={styles.aboutTitle}>Petalwise</Text>
         <Text style={[styles.aboutText, { color: colors.secondaryText }]}>
           AI-powered plant care assistant. Take photos of your plants to get personalized watering schedules and health diagnostics.
         </Text>
@@ -190,4 +212,7 @@ const styles = StyleSheet.create({
   aboutTitle: { fontSize: 22, fontWeight: '800', marginBottom: 8 },
   aboutText: { fontSize: 14, lineHeight: 20 },
   version: { fontSize: 12, marginTop: 8 },
+  accountEmail: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  signOutRow: { paddingVertical: 4 },
+  signOutText: { fontSize: 14, fontWeight: '600' },
 });
