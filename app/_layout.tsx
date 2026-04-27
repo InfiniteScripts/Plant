@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useNotifications } from '@/hooks/useNotifications';
 import { configureFirebase } from '@/services/firebase';
+import { migrateLegacyKey } from '@/services/ai';
 import { startAuthListener, useAuthStore } from '@/stores/authStore';
 
 export { ErrorBoundary } from 'expo-router';
@@ -19,6 +20,7 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync();
 configureFirebase();
 startAuthListener();
+migrateLegacyKey();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -64,6 +66,21 @@ function RootLayoutNav() {
           name="plant/[id]"
           options={{
             title: 'Plant Details',
+            headerBackTitle: 'Back',
+          }}
+        />
+        <Stack.Screen
+          name="rooms"
+          options={{
+            title: 'Manage Rooms',
+            headerBackTitle: 'Back',
+            presentation: 'modal',
+          }}
+        />
+        <Stack.Screen
+          name="settings"
+          options={{
+            title: 'Settings',
             headerBackTitle: 'Back',
           }}
         />

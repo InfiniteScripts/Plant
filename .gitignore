@@ -30,6 +30,14 @@ android/
 .DS_Store
 Thumbs.db
 
+# Marketing site (separate repo)
+petalwise.app/
+
+# Local working folders (root only)
+/images/
+/legal/
+/icons/
+
 # Debug
 npm-debug.*
 yarn-debug.*

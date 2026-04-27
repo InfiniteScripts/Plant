@@ -58,12 +58,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="more"
         options={{
-          title: 'Settings',
+          title: 'More',
           tabBarIcon: ({ color }) => (
             <SymbolView
-              name={{ ios: 'gearshape', android: 'settings', web: 'settings' }}
+              name={{ ios: 'ellipsis.circle', android: 'more_horiz', web: 'more_horiz' }}
               tintColor={color}
               size={24}
             />

@@ -16,16 +16,23 @@ export const PROVIDER_KEY_HINTS: Record<AIProvider, string> = {
   xai: 'xai-...',
 };
 
-const IDENTIFY_SYSTEM = `You are an expert botanist. Identify the plant in the image and provide care information.
+const IDENTIFY_SYSTEM = `You are an expert botanist and plant pathologist. Identify the plant in the image, provide care information, and assess its current health.
 Respond ONLY with valid JSON matching this exact schema:
 {
   "species": "Common name",
   "scientificName": "Latin name",
   "wateringIntervalDays": number,
+  "wateringInstructions": "How to water this specific plant (amount, technique, drainage). 1-2 sentences.",
   "lightPreference": "low" | "medium" | "bright_indirect" | "direct",
   "description": "Brief description of the plant",
-  "careNotes": "Key care tips"
-}`;
+  "careNotes": "Key care tips",
+  "initialHealth": "healthy" | "mild_issues" | "needs_attention" | "critical",
+  "initialIssues": [
+    { "name": "Issue name (e.g. 'Overwatered', 'Needs more sun', 'Spider mites')", "confidence": 0.0-1.0, "description": "What the issue is", "treatment": "How to address it" }
+  ],
+  "initialHealthSummary": "One-sentence plain-language summary of the plant's current condition (e.g. 'Looks healthy and well-watered.' or 'Lower leaves are yellowing — likely overwatered.')"
+}
+If the plant looks healthy, return an empty initialIssues array but still provide the summary.`;
 
 function diagnoseSystem(species: string) {
   return `You are an expert plant pathologist. Analyze the health of this ${species} plant.
@@ -44,8 +51,10 @@ const IDENTIFY_USER = 'Identify this plant and provide its care information.';
 const diagnoseUser = (species: string) =>
   `Analyze the health of this ${species} plant. Look for signs of disease, pests, nutrient deficiencies, or other issues.`;
 
+const FENCED_JSON = /```(?:json)?\s*([\s\S]*?)```/;
+
 function parseJson<T>(text: string): T {
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const match = FENCED_JSON.exec(text);
   return JSON.parse((match ? match[1] : text).trim());
 }
 
@@ -186,7 +195,7 @@ export async function identifyWithProvider(
     base64,
     systemPrompt: IDENTIFY_SYSTEM,
     userText: IDENTIFY_USER,
-    maxTokens: 1024,
+    maxTokens: 2048,
   });
   return parseJson<IdentificationResult>(text);
 }

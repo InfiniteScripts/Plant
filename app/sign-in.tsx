@@ -2,19 +2,22 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
 } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { Text, View } from '@/components/Themed';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuthStore } from '@/stores/authStore';
+import { sendPasswordReset } from '@/services/firebase';
 
 export default function SignInScreen() {
   const scheme = useColorScheme();
@@ -26,6 +29,42 @@ export default function SignInScreen() {
 
   const { signInWithEmail, signUpWithEmail, signInWithApple, signInWithGoogle } =
     useAuthStore();
+
+  const handleForgotPassword = () => {
+    const sendReset = async (target: string) => {
+      const trimmed = target.trim();
+      if (!trimmed) {
+        Alert.alert('Email required', 'Enter your email so we know where to send the reset link.');
+        return;
+      }
+      try {
+        await sendPasswordReset(trimmed);
+        Alert.alert(
+          'Check your email',
+          `We've sent a password reset link to ${trimmed}. Follow the link to set a new password.`
+        );
+      } catch (err) {
+        Alert.alert('Reset failed', err instanceof Error ? err.message : 'Could not send reset email.');
+      }
+    };
+
+    if (email.trim()) {
+      sendReset(email);
+      return;
+    }
+
+    Alert.prompt(
+      'Reset password',
+      'Enter the email address for your account.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Send link', onPress: (input) => sendReset(input ?? '') },
+      ],
+      'plain-text',
+      '',
+      'email-address'
+    );
+  };
 
   const handleEmail = async () => {
     if (!email || !password) {
@@ -74,15 +113,37 @@ export default function SignInScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: palette.background }}
+      style={{ flex: 1 }}
     >
-      <View style={styles.container}>
-        <Text style={styles.title}>Petalwise</Text>
-        <Text style={[styles.subtitle, { color: palette.secondaryText }]}>
-          {mode === 'signIn' ? 'Sign in to continue' : 'Create an account'}
-        </Text>
+      <LinearGradient
+        colors={
+          scheme === 'dark'
+            ? ['#0D2912', '#1B5E20', '#0D2912']
+            : ['#FFFFFF', '#E8F5E9', '#A5D6A7']
+        }
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
+        <View style={[styles.hero, { backgroundColor: 'transparent' }]}>
+          <Image
+            source={require('../assets/images/sign-in-hero.png')}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.55)']}
+            locations={[0.55, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+          <Text style={styles.heroTitle}>Petalwise</Text>
+        </View>
 
-        <TextInput
+        <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+          <TextInput
           placeholder="Email"
           placeholderTextColor={palette.secondaryText}
           autoCapitalize="none"
@@ -106,6 +167,12 @@ export default function SignInScreen() {
             { borderColor: palette.border, color: palette.text, backgroundColor: palette.card },
           ]}
         />
+
+        {mode === 'signIn' && (
+          <Pressable onPress={handleForgotPassword} style={styles.forgotRow}>
+            <Text style={[styles.forgotText, { color: palette.tint }]}>Forgot password?</Text>
+          </Pressable>
+        )}
 
         <Pressable
           onPress={handleEmail}
@@ -143,38 +210,55 @@ export default function SignInScreen() {
           />
         )}
 
-        <GoogleSigninButton
-          size={GoogleSigninButton.Size.Wide}
-          color={
-            scheme === 'dark'
-              ? GoogleSigninButton.Color.Light
-              : GoogleSigninButton.Color.Dark
-          }
+        <Pressable
           onPress={handleGoogle}
           disabled={loading}
-          style={styles.googleButton}
-        />
-      </View>
+          style={({ pressed }) => [
+            styles.googleButton,
+            {
+              backgroundColor: palette.card,
+              borderColor: palette.border,
+              opacity: pressed || loading ? 0.6 : 1,
+            },
+          ]}>
+          <Image
+            source={require('../assets/images/google-logo.png')}
+            style={styles.googleLogo}
+            resizeMode="contain"
+          />
+          <Text style={[styles.googleText, { color: palette.text }]}>Sign in with Google</Text>
+        </Pressable>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  scroll: {
+    flexGrow: 1,
+  },
+  hero: {
+    width: '100%',
+    aspectRatio: 1,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+    paddingBottom: 20,
     paddingHorizontal: 24,
-    justifyContent: 'center',
   },
-  title: {
-    fontSize: 36,
-    fontWeight: '700',
-    textAlign: 'center',
+  heroTitle: {
+    fontSize: 44,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 32,
+  container: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 40,
   },
   input: {
     height: 48,
@@ -201,6 +285,15 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 14,
   },
+  forgotRow: {
+    alignSelf: 'flex-end',
+    marginBottom: 12,
+    marginTop: -4,
+  },
+  forgotText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
   divider: {
     height: 1,
     marginVertical: 24,
@@ -210,7 +303,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   googleButton: {
-    width: '100%',
     height: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  googleLogo: {
+    width: 20,
+    height: 20,
+    marginRight: 12,
+  },
+  googleText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

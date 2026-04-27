@@ -4,11 +4,11 @@ import {
   SectionList,
   TouchableOpacity,
   View as RNView,
-  Image,
 } from 'react-native';
 import { Link } from 'expo-router';
 import { Text } from '@/components/Themed';
 import { EmptyState } from '@/components/EmptyState';
+import { PlantImage } from '@/components/PlantImage';
 import { usePlants } from '@/hooks/usePlants';
 import { Plant } from '@/models/Plant';
 import Colors from '@/constants/Colors';
@@ -87,7 +87,7 @@ export default function ScheduleScreen() {
           <RNView style={[styles.scheduleItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Link href={`/plant/${item.id}`} asChild>
               <TouchableOpacity style={styles.itemContent}>
-                <Image source={{ uri: item.photoUri }} style={styles.thumbnail} />
+                <PlantImage uri={item.photoUri} style={styles.thumbnail} />
                 <RNView style={styles.itemInfo}>
                   <Text style={styles.itemName}>{item.name}</Text>
                   <Text style={[styles.itemSpecies, { color: colors.secondaryText }]}>

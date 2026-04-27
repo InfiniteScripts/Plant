@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithCredential,
   signOut as firebaseSignOut,
+  sendPasswordResetEmail,
   GoogleAuthProvider,
   AppleAuthProvider,
 } from '@react-native-firebase/auth';
@@ -64,6 +65,10 @@ export async function signInWithApple() {
     appleCredential.authorizationCode ?? undefined
   );
   return signInWithCredential(getAuth(), credential);
+}
+
+export async function sendPasswordReset(email: string) {
+  return sendPasswordResetEmail(getAuth(), email);
 }
 
 export async function signOut() {

@@ -18,7 +18,11 @@ export interface IdentificationResult {
   species: string;
   scientificName: string;
   wateringIntervalDays: number;
+  wateringInstructions: string;
   lightPreference: 'low' | 'medium' | 'bright_indirect' | 'direct';
   description: string;
   careNotes: string;
+  initialHealth: 'healthy' | 'mild_issues' | 'needs_attention' | 'critical';
+  initialIssues: PlantIssue[];
+  initialHealthSummary: string;
 }

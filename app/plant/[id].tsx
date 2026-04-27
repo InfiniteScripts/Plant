@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
-  Image,
   TouchableOpacity,
   View as RNView,
   ScrollView,
@@ -9,9 +8,13 @@ import {
   Alert,
 } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
+import { File } from 'expo-file-system';
 import { Text } from '@/components/Themed';
 import { HealthDiagnosis } from '@/components/HealthDiagnosis';
+import { RoomPicker } from '@/components/RoomPicker';
+import { PlantImage } from '@/components/PlantImage';
 import { usePlantStore } from '@/stores/plantStore';
+import { useRooms } from '@/hooks/useRooms';
 import { useCamera } from '@/hooks/useCamera';
 import { diagnosePlant } from '@/services/ai';
 import { DiagnosisResult } from '@/models/DiagnosisResult';
@@ -26,10 +29,15 @@ export default function PlantDetailScreen() {
   const plant = usePlantStore((s) => s.getPlantById(id!));
   const waterPlant = usePlantStore((s) => s.waterPlant);
   const removePlant = usePlantStore((s) => s.removePlant);
+  const updatePlant = usePlantStore((s) => s.updatePlant);
   const { takePhoto, pickFromLibrary } = useCamera();
+  const { rooms } = useRooms();
 
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosis, setDiagnosis] = useState<Omit<DiagnosisResult, 'plantId' | 'photoUri' | 'timestamp'> | null>(null);
+  const [roomPickerOpen, setRoomPickerOpen] = useState(false);
+
+  const currentRoom = rooms.find((r) => r.id === plant?.roomId);
 
   if (!plant) {
     return (
@@ -40,13 +48,26 @@ export default function PlantDetailScreen() {
   }
 
   const needsWater = new Date(plant.nextWateringAt) <= new Date();
-  const lastWateredText = formatDistanceToNow(parseISO(plant.lastWateredAt), { addSuffix: true });
+  const lastWateredText = plant.lastWateredAt
+    ? formatDistanceToNow(parseISO(plant.lastWateredAt), { addSuffix: true })
+    : 'Never';
   const nextWateringText = format(parseISO(plant.nextWateringAt), 'MMM d, yyyy');
 
   const handleDiagnose = async () => {
+    if (!plant.photoUri || !new File(plant.photoUri).exists) {
+      Alert.alert(
+        'Photo unavailable',
+        "We can't find this plant's saved photo. Take a new one to diagnose its health.",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Take photo', onPress: handleDiagnoseNewPhoto },
+        ]
+      );
+      return;
+    }
+
     setDiagnosing(true);
     try {
-      // Use the existing plant photo for diagnosis
       const result = await diagnosePlant(plant.photoUri, plant.species);
       setDiagnosis(result);
     } catch (error) {
@@ -96,7 +117,7 @@ export default function PlantDetailScreen() {
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={styles.content}>
-        <Image source={{ uri: plant.photoUri }} style={styles.heroImage} />
+        <PlantImage uri={plant.photoUri} style={styles.heroImage} />
 
         <RNView style={styles.header}>
           <Text style={styles.plantName}>{plant.name}</Text>
@@ -130,6 +151,18 @@ export default function PlantDetailScreen() {
               </Text>
             </RNView>
           </RNView>
+
+          <TouchableOpacity
+            onPress={() => setRoomPickerOpen(true)}
+            style={[styles.roomRow, { borderColor: colors.border }]}>
+            <Text style={[styles.infoLabel, { color: colors.secondaryText }]}>Room</Text>
+            <RNView style={styles.roomRowRight}>
+              <Text style={[styles.infoValue, { color: colors.text }]}>
+                {currentRoom ? `${currentRoom.emoji}  ${currentRoom.name}` : 'Unassigned'}
+              </Text>
+              <Text style={[styles.roomRowChevron, { color: colors.secondaryText }]}>›</Text>
+            </RNView>
+          </TouchableOpacity>
         </RNView>
 
         {/* Actions */}
@@ -165,6 +198,26 @@ export default function PlantDetailScreen() {
 
         {diagnosis && <HealthDiagnosis diagnosis={diagnosis} />}
 
+        {/* Watering Instructions */}
+        {plant.wateringInstructions && (
+          <RNView style={[styles.notesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={styles.notesTitle}>How to water</Text>
+            <Text style={[styles.notesText, { color: colors.secondaryText }]}>
+              {plant.wateringInstructions}
+            </Text>
+          </RNView>
+        )}
+
+        {/* Initial Health */}
+        {plant.initialHealthSummary && (
+          <RNView style={[styles.notesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={styles.notesTitle}>Health on arrival</Text>
+            <Text style={[styles.notesText, { color: colors.secondaryText }]}>
+              {plant.initialHealthSummary}
+            </Text>
+          </RNView>
+        )}
+
         {/* Notes */}
         {plant.notes && (
           <RNView style={[styles.notesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -178,6 +231,13 @@ export default function PlantDetailScreen() {
           <Text style={[styles.deleteButtonText, { color: colors.error }]}>Delete Plant</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <RoomPicker
+        visible={roomPickerOpen}
+        selectedRoomId={plant.roomId}
+        onSelect={(newRoomId) => updatePlant(plant.id, { roomId: newRoomId })}
+        onClose={() => setRoomPickerOpen(false)}
+      />
     </>
   );
 }
@@ -237,4 +297,14 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   deleteButtonText: { fontSize: 16, fontWeight: '500' },
+  roomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+  },
+  roomRowRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  roomRowChevron: { fontSize: 20, fontWeight: '300' },
 });

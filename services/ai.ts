@@ -1,89 +1,89 @@
 import * as SecureStore from 'expo-secure-store';
+import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
 import { IdentificationResult, DiagnosisResult } from '@/models/DiagnosisResult';
 import { getImageBase64 } from './imageUtils';
+import {
+  AIProvider,
+  identifyWithProvider,
+  diagnoseWithProvider,
+} from './aiProviders';
 
-const API_KEY_STORAGE_KEY = 'anthropic_api_key';
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-20250514';
+const PROVIDER_PREF_KEY = 'ai_provider_preference';
+const HOSTED_MODE_KEY = 'ai_hosted_mode';
+const LEGACY_KEY = 'anthropic_api_key';
 
-export async function setApiKey(key: string): Promise<void> {
-  await SecureStore.setItemAsync(API_KEY_STORAGE_KEY, key);
+function providerKeyName(provider: AIProvider) {
+  return `ai_key_${provider}`;
 }
 
-export async function getApiKey(): Promise<string | null> {
-  return SecureStore.getItemAsync(API_KEY_STORAGE_KEY);
+export type AIMode = 'hosted' | 'byok';
+
+export async function getMode(): Promise<AIMode> {
+  const v = await SecureStore.getItemAsync(HOSTED_MODE_KEY);
+  return v === 'byok' ? 'byok' : 'hosted';
 }
 
-export async function hasApiKey(): Promise<boolean> {
-  const key = await getApiKey();
-  return key !== null && key.length > 0;
+export async function setMode(mode: AIMode): Promise<void> {
+  await SecureStore.setItemAsync(HOSTED_MODE_KEY, mode);
 }
 
-async function callClaude(
-  systemPrompt: string,
-  userContent: Array<{ type: string; [key: string]: unknown }>,
-  maxTokens: number = 1024
-): Promise<string> {
-  const apiKey = await getApiKey();
-  if (!apiKey) throw new Error('API key not configured. Go to Settings to add your Anthropic API key.');
+export async function getProvider(): Promise<AIProvider> {
+  const v = (await SecureStore.getItemAsync(PROVIDER_PREF_KEY)) as AIProvider | null;
+  return v ?? 'anthropic';
+}
 
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-    }),
-  });
+export async function setProvider(provider: AIProvider): Promise<void> {
+  await SecureStore.setItemAsync(PROVIDER_PREF_KEY, provider);
+}
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`AI request failed: ${error}`);
+export async function getApiKey(provider: AIProvider): Promise<string | null> {
+  return SecureStore.getItemAsync(providerKeyName(provider));
+}
+
+export async function setApiKey(provider: AIProvider, key: string): Promise<void> {
+  if (!key) {
+    await SecureStore.deleteItemAsync(providerKeyName(provider));
+    return;
   }
-
-  const data = await response.json();
-  return data.content[0].text;
+  await SecureStore.setItemAsync(providerKeyName(provider), key);
 }
 
-function parseJsonResponse<T>(text: string): T {
-  // Extract JSON from potential markdown code blocks
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const jsonStr = jsonMatch ? jsonMatch[1].trim() : text.trim();
-  return JSON.parse(jsonStr);
+export async function hasApiKey(provider: AIProvider): Promise<boolean> {
+  const key = await getApiKey(provider);
+  return !!key;
+}
+
+// Migrate the legacy single-key storage into the new per-provider slot.
+export async function migrateLegacyKey(): Promise<void> {
+  const legacy = await SecureStore.getItemAsync(LEGACY_KEY);
+  if (!legacy) return;
+  const existing = await SecureStore.getItemAsync(providerKeyName('anthropic'));
+  if (!existing) {
+    await SecureStore.setItemAsync(providerKeyName('anthropic'), legacy);
+  }
+  await SecureStore.deleteItemAsync(LEGACY_KEY);
+}
+
+async function callHosted<T>(name: 'identifyPlant' | 'diagnosePlant', payload: unknown): Promise<T> {
+  const fn = httpsCallable<unknown, T>(getFunctions(), name);
+  const result = await fn(payload);
+  return result.data;
 }
 
 export async function identifyPlant(photoUri: string): Promise<IdentificationResult> {
   const base64 = await getImageBase64(photoUri);
+  const mode = await getMode();
 
-  const systemPrompt = `You are an expert botanist. Identify the plant in the image and provide care information.
-Respond ONLY with valid JSON matching this exact schema:
-{
-  "species": "Common name",
-  "scientificName": "Latin name",
-  "wateringIntervalDays": number (how often to water in days),
-  "lightPreference": "low" | "medium" | "bright_indirect" | "direct",
-  "description": "Brief description of the plant",
-  "careNotes": "Key care tips"
-}`;
+  if (mode === 'hosted') {
+    return callHosted<IdentificationResult>('identifyPlant', { imageBase64: base64 });
+  }
 
-  const response = await callClaude(systemPrompt, [
-    {
-      type: 'image',
-      source: { type: 'base64', media_type: 'image/jpeg', data: base64 },
-    },
-    {
-      type: 'text',
-      text: 'Identify this plant and provide its care information.',
-    },
-  ]);
-
-  return parseJsonResponse<IdentificationResult>(response);
+  const provider = await getProvider();
+  const key = await getApiKey(provider);
+  if (!key) {
+    throw new Error(`No API key set for ${provider}. Add one in Settings.`);
+  }
+  return identifyWithProvider(provider, key, base64);
 }
 
 export async function diagnosePlant(
@@ -91,37 +91,16 @@ export async function diagnosePlant(
   species: string
 ): Promise<Omit<DiagnosisResult, 'plantId' | 'photoUri' | 'timestamp'>> {
   const base64 = await getImageBase64(photoUri);
+  const mode = await getMode();
 
-  const systemPrompt = `You are an expert plant pathologist. Analyze the health of this ${species} plant.
-Respond ONLY with valid JSON matching this exact schema:
-{
-  "overallHealth": "healthy" | "mild_issues" | "needs_attention" | "critical",
-  "issues": [
-    {
-      "name": "Issue name",
-      "confidence": 0.0-1.0,
-      "description": "What the issue is",
-      "treatment": "How to treat it"
-    }
-  ],
-  "careRecommendations": ["recommendation 1", "recommendation 2"]
-}
-If the plant looks healthy, return an empty issues array and provide general care recommendations.`;
+  if (mode === 'hosted') {
+    return callHosted('diagnosePlant', { imageBase64: base64, species });
+  }
 
-  const response = await callClaude(
-    systemPrompt,
-    [
-      {
-        type: 'image',
-        source: { type: 'base64', media_type: 'image/jpeg', data: base64 },
-      },
-      {
-        type: 'text',
-        text: `Analyze the health of this ${species} plant. Look for signs of disease, pests, nutrient deficiencies, or other issues.`,
-      },
-    ],
-    2048
-  );
-
-  return parseJsonResponse(response);
+  const provider = await getProvider();
+  const key = await getApiKey(provider);
+  if (!key) {
+    throw new Error(`No API key set for ${provider}. Add one in Settings.`);
+  }
+  return diagnoseWithProvider(provider, key, base64, species);
 }

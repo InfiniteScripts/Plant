@@ -15,8 +15,11 @@ import { router } from 'expo-router';
 import { Text } from '@/components/Themed';
 import { useCamera } from '@/hooks/useCamera';
 import { usePlantStore } from '@/stores/plantStore';
-import { identifyPlant } from '@/services/ai';
+import { useRooms } from '@/hooks/useRooms';
+import { identifyPlant, getMode, getProvider, hasApiKey } from '@/services/ai';
+import { PROVIDER_LABELS } from '@/services/aiProviders';
 import { IdentificationResult } from '@/models/DiagnosisResult';
+import { RoomPicker } from '@/components/RoomPicker';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 
@@ -27,13 +30,45 @@ export default function AddPlantScreen() {
   const colors = Colors[colorScheme];
   const { photo, takePhoto, pickFromLibrary, clearPhoto } = useCamera();
   const addPlant = usePlantStore((s) => s.addPlant);
+  const { rooms } = useRooms();
 
   const [step, setStep] = useState<Step>('capture');
   const [identification, setIdentification] = useState<IdentificationResult | null>(null);
   const [plantName, setPlantName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [roomId, setRoomId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const selectedRoom = rooms.find((r) => r.id === roomId);
+
+  const ensureAIReady = async (): Promise<boolean> => {
+    const mode = await getMode();
+    if (mode === 'hosted') return true;
+
+    const provider = await getProvider();
+    if (await hasApiKey(provider)) return true;
+
+    return new Promise<boolean>((resolve) => {
+      Alert.alert(
+        'API key required',
+        `You're using your own ${PROVIDER_LABELS[provider]} key, but none is saved yet. Add one in Settings to identify plants.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              resolve(false);
+              router.push('/settings');
+            },
+          },
+        ]
+      );
+    });
+  };
 
   const handleCapture = async (method: 'camera' | 'library') => {
+    if (!(await ensureAIReady())) return;
+
     const uri = method === 'camera' ? await takePhoto() : await pickFromLibrary();
     if (!uri) return;
 
@@ -65,8 +100,11 @@ export default function AddPlantScreen() {
         scientificName: identification?.scientificName,
         photoUri: photo,
         wateringIntervalDays: identification?.wateringIntervalDays ?? 7,
+        wateringInstructions: identification?.wateringInstructions,
         lightPreference: identification?.lightPreference,
         notes: identification?.careNotes,
+        roomId,
+        initialHealthSummary: identification?.initialHealthSummary,
       });
 
       // Reset state
@@ -74,6 +112,7 @@ export default function AddPlantScreen() {
       setStep('capture');
       setIdentification(null);
       setPlantName('');
+      setRoomId(null);
 
       router.push(`/plant/${plant.id}`);
     } catch (error) {
@@ -88,6 +127,7 @@ export default function AddPlantScreen() {
     setStep('capture');
     setIdentification(null);
     setPlantName('');
+    setRoomId(null);
   };
 
   if (step === 'capture') {
@@ -161,6 +201,40 @@ export default function AddPlantScreen() {
                 </Text>
               </RNView>
             </RNView>
+
+            {identification.wateringInstructions && (
+              <RNView style={[styles.subSection, { borderTopColor: colors.border }]}>
+                <Text style={[styles.detailLabel, { color: colors.secondaryText }]}>How to water</Text>
+                <Text style={[styles.subSectionText, { color: colors.text }]}>
+                  {identification.wateringInstructions}
+                </Text>
+              </RNView>
+            )}
+
+            {(identification.initialHealthSummary || identification.initialIssues?.length > 0) && (
+              <RNView style={[styles.subSection, { borderTopColor: colors.border }]}>
+                <RNView style={styles.healthHeader}>
+                  <Text style={[styles.detailLabel, { color: colors.secondaryText }]}>Current health</Text>
+                  <HealthBadge status={identification.initialHealth} colors={colors} />
+                </RNView>
+                {identification.initialHealthSummary && (
+                  <Text style={[styles.subSectionText, { color: colors.text }]}>
+                    {identification.initialHealthSummary}
+                  </Text>
+                )}
+                {identification.initialIssues?.map((issue) => (
+                  <RNView key={issue.name} style={styles.issueRow}>
+                    <Text style={[styles.issueName, { color: colors.text }]}>{issue.name}</Text>
+                    <Text style={[styles.issueText, { color: colors.secondaryText }]}>
+                      {issue.description}
+                    </Text>
+                    <Text style={[styles.issueText, { color: colors.secondaryText, fontStyle: 'italic' }]}>
+                      Treatment: {issue.treatment}
+                    </Text>
+                  </RNView>
+                ))}
+              </RNView>
+            )}
           </RNView>
         )}
 
@@ -172,6 +246,16 @@ export default function AddPlantScreen() {
           placeholder="Give your plant a name"
           placeholderTextColor={colors.secondaryText}
         />
+
+        <Text style={[styles.inputLabel, { color: colors.secondaryText }]}>Room</Text>
+        <TouchableOpacity
+          onPress={() => setPickerOpen(true)}
+          style={[styles.input, styles.roomRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.roomRowText, { color: colors.text }]}>
+            {selectedRoom ? `${selectedRoom.emoji}  ${selectedRoom.name}` : 'Choose a room'}
+          </Text>
+          <Text style={[styles.roomRowChevron, { color: colors.secondaryText }]}>›</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.saveButton, { backgroundColor: colors.tint }, saving && styles.disabled]}
@@ -188,6 +272,13 @@ export default function AddPlantScreen() {
           <Text style={[styles.resetButtonText, { color: colors.secondaryText }]}>Start over</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <RoomPicker
+        visible={pickerOpen}
+        selectedRoomId={roomId}
+        onSelect={setRoomId}
+        onClose={() => setPickerOpen(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -251,4 +342,51 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.6 },
   resetButton: { alignItems: 'center', marginTop: 16 },
   resetButtonText: { fontSize: 15 },
+  roomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  roomRowText: { fontSize: 16, fontWeight: '500' },
+  roomRowChevron: { fontSize: 20, fontWeight: '300' },
+  subSection: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+  },
+  subSectionText: { fontSize: 14, lineHeight: 20, marginTop: 4 },
+  healthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  healthBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  healthBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  issueRow: { marginTop: 10 },
+  issueName: { fontSize: 14, fontWeight: '600' },
+  issueText: { fontSize: 13, lineHeight: 18, marginTop: 2 },
 });
+
+interface HealthBadgeProps {
+  readonly status: IdentificationResult['initialHealth'];
+  readonly colors: typeof Colors.light;
+}
+
+function HealthBadge({ status, colors }: Readonly<HealthBadgeProps>) {
+  const map: Record<IdentificationResult['initialHealth'], { label: string; bg: string }> = {
+    healthy: { label: 'Healthy', bg: colors.success },
+    mild_issues: { label: 'Mild issues', bg: colors.warning },
+    needs_attention: { label: 'Needs attention', bg: colors.warning },
+    critical: { label: 'Critical', bg: colors.error },
+  };
+  const { label, bg } = map[status] ?? map.healthy;
+  return (
+    <RNView style={[styles.healthBadge, { backgroundColor: bg }]}>
+      <Text style={styles.healthBadgeText}>{label}</Text>
+    </RNView>
+  );
+}

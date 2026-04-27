@@ -80,7 +80,8 @@
               "RNFBAuth",
               "RNFBAnalytics",
               "RNFBCrashlytics",
-              "RNFBMessaging"
+              "RNFBMessaging",
+              "RNFBFunctions"
             ]
           }
         }
